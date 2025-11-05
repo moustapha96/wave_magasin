@@ -1,0 +1,39 @@
+<odoo>
+    <record id="view_order_form_inherit" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form" />
+        <field name="arch" type="xml">
+
+
+            <xpath expr="//header" position="inside">
+                <button name="action_initiate_wave_payment" string="Payer avec Wave" type="object"
+                    class="btn-primary" />
+            </xpath>
+
+            <xpath expr="//notebook/page[@name='order_lines']" position="after">
+                <page string="Paiement WAVE" name="payment_wave">
+                    <field name="wave_transaction_ids">
+                        <tree>
+                            <field name="wave_id" />
+                            <field name="transaction_id" />
+                            <!-- <field name="reference" /> -->
+                            <field name="amount" />
+                            <!-- <field name="currency" /> -->
+                            <field name="phone" />
+                            <!-- <field name="status" /> -->
+                            <!-- <field name="checkout_status" /> -->
+                            <field name="payment_status" />
+                            <!-- <field name="payment_link_url" widget="url" /> -->
+                            <field name="created_at" />
+                            <!-- <field name="updated_at" /> -->
+                            <field name="completed_at" />
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+
+</odoo>

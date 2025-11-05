@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Menu principal Wave -->
+    <menuitem id="menu_wave_root" name="Wave Money" sequence="50"
+        web_icon="wave,static/description/icon.png" />
+
+    <!-- Sous-menus -->
+    <menuitem id="menu_wave_transactions" name="Transactions" parent="menu_wave_root"
+        action="action_wave_transaction" sequence="10" />
+    <menuitem id="menu_wave_config" name="Configuration" parent="menu_wave_root"
+        action="action_wave_config" sequence="20" />
+
+    <!-- Menu dans Comptabilité -->
+    <menuitem id="menu_wave_accounting" name="Wave Money" parent="account.menu_finance_payables"
+        sequence="50" />
+    <menuitem id="menu_wave_transactions_accounting" name="Transactions Wave"
+        parent="menu_wave_accounting" action="action_wave_transaction" sequence="10" />
+</odoo>

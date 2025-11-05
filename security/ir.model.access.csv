@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+
+access_wave_config_user,wave.config.user,model_wave_config,base.group_user,1,0,0,0
+access_wave_config_manager,wave.config.manager,model_wave_config,account.group_account_manager,1,1,1,1
+access_wave_transaction_user,wave.transaction.user,model_wave_transaction,base.group_user,1,0,0,0
+access_wave_transaction_manager,wave.transaction.manager,model_wave_transaction,account.group_account_manager,1,1,1,1
+access_wave_transaction_public,wave.transaction.public,model_wave_transaction,,1,1,1,0
+access_wave_config_public,wave.config.public,model_wave_config,,1,0,0,0
