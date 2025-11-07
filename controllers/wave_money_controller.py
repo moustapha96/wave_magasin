@@ -70,7 +70,7 @@ class WaveMoneyController(http.Controller):
             payload = {
                 "amount": amount,
                 "currency": currency,
-                "success_url": f"https://www.ccbmshop.com/wave-paiement?transaction={transaction_id}",
+                "success_url": f"https://portail.toubasandaga.sn/wave-paiement?transaction={transaction_id}",
                 "error_url": config.callback_url
             }
             headers = {

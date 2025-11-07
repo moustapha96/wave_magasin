@@ -290,7 +290,7 @@ class WaveTransaction(models.Model):
                     <h3 style="margin: 5px 0 0;">Référence: {self.reference}</h3>
                 </div>
                 <div class="company-logo" style="text-align: right;">
-                    <img src="https://ccbmshop.sn/logo.png" alt="CCTS Logo"
+                    <img src="https://portail.toubasandaga.sn/logo.png" alt="CCTS Logo"
                         style="max-width: 180px; max-height: 120px; object-fit: contain;" onerror="this.style.display='none'" />
                 </div>
             </div>
