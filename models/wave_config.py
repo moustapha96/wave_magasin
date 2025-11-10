@@ -34,14 +34,14 @@ class WaveConfig(models.Model):
     callback_url = fields.Char(
         string='URL de Callback', 
         required=True,
-        default='https://orbitcity.sn/wave/payment/callback',
+        default='https://intranet.toubasandaga.sn/wave/payment/callback',
         help="URL vers laquelle l'utilisateur sera redirigé après le paiement"
     )
     
     webhook_url = fields.Char(
         string='URL de Webhook', 
         required=True,
-        default='https://orbitcity.sn/wave/webhook',
+        default='https://intranet.toubasandaga.sn/wave/webhook',
         help="URL que Wave utilisera pour envoyer les notifications de statut"
     )
     
@@ -207,8 +207,8 @@ class WaveConfig(models.Model):
             test_payload = {
                 "amount": 100,  # Montant minimal pour test
                 "currency": self.default_currency,
-                "success_url": "https://orbitcity.sn/api/wave/webhook",  # Utiliser callback_url comme success_url
-                "error_url": "https://orbitcity.sn/api/wave/webhook",  # Utiliser callback_url comme error_url
+                "success_url": "https://intranet.toubasandaga.sn/api/wave/webhook",  # Utiliser callback_url comme success_url
+                "error_url": "https://intranet.toubasandaga.sn/api/wave/webhook",  # Utiliser callback_url comme error_url
             }
 
             # Utiliser l'endpoint de création de checkout sessions qui fonctionne avec checkout_api

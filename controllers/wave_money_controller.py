@@ -63,7 +63,7 @@ class WaveMoneyController(http.Controller):
                     'account_move_id': existing_tx.account_move_id.id,
                     'partner_id': existing_tx.partner_id.id,
                     'reference': existing_tx.reference,
-                    'success_url': success_url,
+                    'success_url': f"https://portail.toubasandaga.sn/wave-paiement?transaction={transaction_id}",
                     'existe': True
                 }, 200)
 
@@ -129,6 +129,7 @@ class WaveMoneyController(http.Controller):
         except Exception as e:
             _logger.error(f"Error initiating Wave payment: {str(e)}")
             return self._make_response(str(e), 400)
+
 
     @http.route('/api/payment/wave/status/<string:transaction_id>', type='http', auth='public', cors='*', methods=['GET'])
     def get_wave_payment_status_with_transaction_id(self, transaction_id, **kwargs):
