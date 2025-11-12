@@ -31,6 +31,7 @@ class WaveMoneyWebhookController(http.Controller):
             body = request.httprequest.get_data()
             try:
                 webhook_data = json.loads(body.decode('utf-8'))
+                _logger.info(f"Received Wave webhook data: {webhook_data}")
             except json.JSONDecodeError:
                 return self._json_response({'error': 'Invalid JSON'}, 400)
 
