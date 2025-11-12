@@ -395,7 +395,7 @@ class WaveMoneyWebhookController(http.Controller):
 
         # Enregistre un paiement sur la facture via le wizard standard
         company = invoice.company_id or request.env.company
-        pay_res = self._register_payment_via_wizard(invoice=invoice, amount=tx.amount, company=company, communication=f"Wave {session_id}")
+        pay_res = self._register_payment_directly(invoice=invoice, amount=tx.amount, company=company, communication=f"Wave {session_id}")
         return pay_res
 
     # --------------------------
@@ -414,7 +414,7 @@ class WaveMoneyWebhookController(http.Controller):
     # --------------------------
     # Paiement via le wizard standard
     # --------------------------
-    def _register_payment_via_wizard(self, invoice, amount, company, communication=None):
+    def _register_payment_via_wizarddd(self, invoice, amount, company, communication=None):
         """
         Enregistre (et réconcilie) un paiement sur une facture via `account.payment.register`.
         - Poste d'abord la facture si nécessaire
@@ -484,6 +484,55 @@ class WaveMoneyWebhookController(http.Controller):
         except Exception as e:
             _logger.exception("Erreur enregistrement paiement via wizard: %s", e)
             return {'success': False, 'error': str(e)}
+    
+
+    def _register_payment_directly(self, invoice, amount, company, communication=None):
+        try:
+            # 1) Vérifier que la facture est postée
+            if invoice.state == 'draft':
+                invoice.sudo().action_post()
+            # 2) Trouver un journal de paiement
+            journal = self._find_inbound_journal(company)
+            if not journal:
+                return {'success': False, 'error': "Aucun journal de paiement trouvé"}
+            # 3) Trouver une méthode de paiement
+            payment_method = request.env['account.payment.method'].sudo().search([('payment_type', '=', 'inbound')], limit=1)
+            if not payment_method:
+                return {'success': False, 'error': "Aucune méthode de paiement 'inbound' trouvée"}
+            # 4) Trouver une ligne de méthode de paiement
+            payment_method_line = request.env['account.payment.method.line'].sudo().search([('payment_method_id', '=', payment_method.id), ('journal_id', '=', journal.id)], limit=1)
+            if not payment_method_line:
+                payment_method_line = self.create_payment_method_line(payment_method.id, journal.id)
+            # 5) Créer le paiement
+            payment = request.env['account.payment'].sudo().create({
+                'payment_type': 'inbound',
+                'partner_type': 'customer',
+                'partner_id': invoice.partner_id.id,
+                'amount': amount,
+                'journal_id': journal.id,
+                'payment_method_line_id': payment_method_line.id,
+                'payment_method_id': payment_method.id,
+                'date': fields.Date.today(),
+                'ref': communication or invoice.name,
+                'move_id': invoice.id,
+            })
+            # 6) Valider le paiement
+            payment.action_post()
+            # 7) Rafraîchir la facture
+            invoice.invalidate_cache()
+            return {
+                'success': True,
+                'message': 'Paiement enregistré avec succès',
+                'invoice_id': invoice.id,
+                'invoice_state': invoice.state,
+                'payment_state': invoice.payment_state,
+                'amount_paid_now': amount,
+                'amount_residual': invoice.amount_residual,
+            }
+        except Exception as e:
+            _logger.exception("Erreur enregistrement paiement direct: %s", e)
+            return {'success': False, 'error': str(e)}
+
 
     # --------------------------
     # Sélections journal / method line
@@ -510,3 +559,36 @@ class WaveMoneyWebhookController(http.Controller):
         # Si plusieurs, on tente la "manuelle" par défaut
         manual = pmls.filtered(lambda l: (l.name or '').lower().find('manual') >= 0 or (l.payment_method_id and (l.payment_method_id.code or '') == 'manual'))
         return manual[:1] or pmls[:1]
+    
+    def create_payment_method_line(self, payment_method_id, journal_id):
+        """
+        Crée une ligne de méthode de paiement pour un journal donné.
+
+        Args:
+            payment_method_id (int): ID de la méthode de paiement (account.payment.method)
+            journal_id (int): ID du journal (account.journal)
+
+        Returns:
+            account.payment.method.line: Ligne de méthode de paiement créée
+        """
+        try:
+            # Vérifier que la méthode de paiement et le journal existent
+            payment_method = request.env['account.payment.method'].browse(payment_method_id)
+            journal = request.env['account.journal'].browse(journal_id)
+
+            if not payment_method or not journal:
+                raise ValueError("La méthode de paiement ou le journal n'existe pas.")
+
+            # Créer la ligne de méthode de paiement
+            payment_method_line = request.env['account.payment.method.line'].create({
+                'name': f"{payment_method.name} - {journal.name}",
+                'payment_method_id': payment_method_id,
+                'journal_id': journal_id,
+                'sequence': 10,
+            })
+
+            return payment_method_line
+        except Exception as e:
+            _logger.exception("Erreur lors de la création de la ligne de méthode de paiement : %s", str(e))
+            return None
+
