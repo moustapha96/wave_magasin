@@ -764,7 +764,12 @@ class WaveTransaction(models.Model):
 
             payment_method_line = self.env['account.payment.method.line'].sudo().search([('payment_method_id', '=', payment_method.id)], limit=1)
             if not payment_method_line:
-                raise ValueError("Aucune méthode de paiement valide trouvée.")
+                payment_method_line = self.create_payment_method_line(payment_method.id, journal.id)
+                if payment_method_line:
+                    print(f"Ligne de méthode de paiement créée avec l'ID : {payment_method_line.id}")
+                else:
+                    print("Échec de la création de la ligne de méthode de paiement.")
+
 
 
            
@@ -797,6 +802,37 @@ class WaveTransaction(models.Model):
             return False
 
 
+    def create_payment_method_line(self, payment_method_id, journal_id):
+        """
+        Crée une ligne de méthode de paiement pour un journal donné.
+
+        Args:
+            payment_method_id (int): ID de la méthode de paiement (account.payment.method)
+            journal_id (int): ID du journal (account.journal)
+
+        Returns:
+            account.payment.method.line: Ligne de méthode de paiement créée
+        """
+        try:
+            # Vérifier que la méthode de paiement et le journal existent
+            payment_method = self.env['account.payment.method'].browse(payment_method_id)
+            journal = self.env['account.journal'].browse(journal_id)
+
+            if not payment_method or not journal:
+                raise ValueError("La méthode de paiement ou le journal n'existe pas.")
+
+            # Créer la ligne de méthode de paiement
+            payment_method_line = self.env['account.payment.method.line'].create({
+                'name': f"{payment_method.name} - {journal.name}",
+                'payment_method_id': payment_method_id,
+                'journal_id': journal_id,
+                'sequence': 10,  # Ordre d'affichage
+            })
+
+            return payment_method_line
+        except Exception as e:
+            _logger.exception("Erreur lors de la création de la ligne de méthode de paiement : %s", str(e))
+            return None
 
 
     _sql_constraints = [
