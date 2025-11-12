@@ -150,6 +150,9 @@ class WaveMoneyWebhookController(http.Controller):
 
             _logger.info("Journal de vente %s", journal.name)
                 
+            if not journal:
+                return {'success': False, 'error': 'Journal de vente non trouvé'}
+
 
             payment = self._register_payment( invoice, amount, journal.id)
             if not payment:
@@ -191,13 +194,25 @@ class WaveMoneyWebhookController(http.Controller):
                 payment_method = request.env['account.payment.method'].sudo().search([('payment_type', '=', 'inbound')], limit=1)
 
 
+            payment_method_line = request.env['account.payment.method.line'].sudo().search([('payment_method_id', '=', payment_method.id)], limit=1)
+            if not payment_method_line:
+                payment_method_line = self.create_payment_method_line(payment_method.id, journal_id)
+                if payment_method_line:
+                    _logger.info(f"Ligne de méthode de paiement créée avec l'ID : {payment_method_line.id}")
+                else:
+                    _logger.info("Échec de la création de la ligne de méthode de paiement.")
+
+
+
+            _logger.info("payment_method_line: %s", payment_method_line)
+
             payment_obj = request.env['account.payment'].create({
                 'payment_type': 'inbound',
                 'partner_type': 'customer',
                 'partner_id': invoice.partner_id.id,
                 'amount': amount,
                 'journal_id': journal_id,
-                'payment_method_line_id': 1,
+                'payment_method_line_id': payment_method_line.id,
                 'payment_method_id': payment_method.id,
                 'date': fields.Date.today(),
                 'ref': f"{invoice.name}",
@@ -209,6 +224,42 @@ class WaveMoneyWebhookController(http.Controller):
         except Exception as e:
             _logger.exception("Erreur lors de l'enregistrement du paiement : %s", str(e))
             return None
+
+
+    def create_payment_method_line(self, payment_method_id, journal_id):
+        """
+        Crée une ligne de méthode de paiement pour un journal donné.
+
+        Args:
+            payment_method_id (int): ID de la méthode de paiement (account.payment.method)
+            journal_id (int): ID du journal (account.journal)
+
+        Returns:
+            account.payment.method.line: Ligne de méthode de paiement créée
+        """
+        try:
+            # Vérifier que la méthode de paiement et le journal existent
+            payment_method = request.env['account.payment.method'].browse(payment_method_id)
+            journal = request.env['account.journal'].browse(journal_id)
+
+            if not payment_method or not journal:
+                raise ValueError("La méthode de paiement ou le journal n'existe pas.")
+
+            # Créer la ligne de méthode de paiement
+            payment_method_line = request.env['account.payment.method.line'].create({
+                'name': f"{payment_method.name} - {journal.name}",
+                'payment_method_id': payment_method_id,
+                'journal_id': journal_id,
+                'sequence': 10,
+            })
+
+            return payment_method_line
+        except Exception as e:
+            _logger.exception("Erreur lors de la création de la ligne de méthode de paiement : %s", str(e))
+            return None
+
+
+
 
     def _reconcile_payment_with_invoice(self, payment, invoice):
         """
