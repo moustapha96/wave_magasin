@@ -465,10 +465,10 @@ class WaveMoneyWebhookController(http.Controller):
             # 6) Lancer la création des paiements (poste + réconciliation automatique)
             action = wizard.action_create_payments()  # retourne une action, pas forcément utile ici
 
-            # 7) Rafraîchir l’état de la facture
-            invoice.flush_recordset()  # cohérence cache ORM
-            invoice.invalidate_recordset()
-            invoice.refresh()
+            # # 7) Rafraîchir l’état de la facture
+            # invoice.flush_recordset()  # cohérence cache ORM
+            # invoice.invalidate_recordset()
+            # invoice.refresh()
 
             return {
                 'success': True,
