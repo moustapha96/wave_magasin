@@ -482,38 +482,32 @@ class WaveTransaction(models.Model):
         except Exception as e:
             _logger.error(f"Erreur lors de l'envoi de la notification: {str(e)}")
 
+
     def write(self, vals):
         """Surcharger write pour mettre à jour la date de modification et générer la facture"""
         if 'status' in vals:
             _logger.info(f"Changing status of transaction {self.id} from {self.status} to {vals['status']}")
-
         vals['updated_at'] = fields.Datetime.now()
-
         # Si le statut passe à 'completed', enregistrer la date et générer la facture
         if vals.get('status') == 'completed' and self.status != 'completed':
             vals['completed_at'] = fields.Datetime.now()
-
             # Appeler la méthode de génération de facture après la mise à jour
             result = super().write(vals)
-
             # Générer la facture PDF de manière asynchrone pour éviter les blocages
             try:
                 self._generate_invoice_pdf()
                 _logger.info(f"Facture générée avec succès pour la transaction {self.transaction_id}")
             except Exception as e:
                 _logger.error(f"Erreur lors de la génération de la facture pour la transaction {self.transaction_id}: {str(e)}")
-
-                # Créer le paiement et relier la facture
+            # Créer le paiement et le relier à la facture
             try:
                 self._create_payment_and_link_invoice()
-                _logger.info(f"Paiement et facture créés avec succès pour la transaction {self.transaction_id}")
+                _logger.info(f"Paiement créé et réconcilié avec succès pour la transaction {self.transaction_id}")
             except Exception as e:
-                _logger.error(f"Erreur lors de la création du paiement et de la facture pour la transaction {self.transaction_id}: {str(e)}")
-
-
+                _logger.error(f"Erreur lors de la création du paiement pour la transaction {self.transaction_id}: {str(e)}")
             return result
-
         return super().write(vals)
+
 
     @api.model
     def create(self, vals):
@@ -727,15 +721,24 @@ class WaveTransaction(models.Model):
                 }
             }
 
-
     def _create_payment_and_link_invoice(self):
-        """Créer un paiement et relier à une facture pour une transaction réussie"""
+        """Créer un paiement et le relier à la facture existante pour une transaction réussie"""
         try:
-            _logger.info(f"Création du paiement et liaison de la facture pour la transaction {self.transaction_id}")
+            _logger.info(f"Création du paiement pour la transaction {self.transaction_id}")
 
             # Vérifier que la transaction est bien complétée
             if self.status != 'completed':
                 _logger.warning(f"La transaction {self.transaction_id} n'est pas complétée. Aucun paiement créé.")
+                return False
+
+            # Vérifier qu'une facture est liée
+            if not self.account_move_id:
+                _logger.error(f"Aucune facture liée à la transaction {self.transaction_id}.")
+                return False
+
+            # Vérifier qu'un client est lié
+            if not self.partner_id:
+                _logger.error(f"Aucun client lié à la transaction {self.transaction_id}.")
                 return False
 
             # Récupérer les informations nécessaires
@@ -743,36 +746,25 @@ class WaveTransaction(models.Model):
             partner = self.partner_id
             company = self.env.company
 
-            # Rechercher un journal de vente
+            # Rechercher un journal de type 'bank' ou 'cash'
             journal = self.env['account.journal'].search([
-                ('type', '=', 'sale'),
+                ('type', 'in', ['bank', 'cash']),
                 ('company_id', '=', company.id)
             ], limit=1)
 
             if not journal:
-                _logger.error("Aucun journal de vente trouvé pour la compagnie.")
+                _logger.error("Aucun journal de paiement (bank/cash) trouvé pour la compagnie.")
                 return False
 
             # Rechercher une méthode de paiement
-            payment_method = self.env['account.payment.method'].search([('payment_type', '=', 'inbound')], limit=1)
-            
-            _logger.info("payment_method: %s", payment_method)
-            
+            payment_method = self.env['account.payment.method'].search([
+                ('payment_type', '=', 'inbound')
+            ], limit=1)
+
             if not payment_method:
-                payment_method = self.env['account.payment.method'].sudo().search([('payment_type', '=', 'inbound')], limit=1)
+                _logger.error("Aucune méthode de paiement trouvée.")
+                return False
 
-
-            payment_method_line = self.env['account.payment.method.line'].sudo().search([('payment_method_id', '=', payment_method.id)], limit=1)
-            if not payment_method_line:
-                payment_method_line = self.create_payment_method_line(payment_method.id, journal.id)
-                if payment_method_line:
-                    print(f"Ligne de méthode de paiement créée avec l'ID : {payment_method_line.id}")
-                else:
-                    print("Échec de la création de la ligne de méthode de paiement.")
-
-
-
-           
             # Créer le paiement
             payment = self.env['account.payment'].create({
                 'payment_type': 'inbound',
@@ -780,59 +772,58 @@ class WaveTransaction(models.Model):
                 'partner_id': partner.id,
                 'amount': self.amount,
                 'journal_id': journal.id,
-                'currency_id': partner.currency_id.id or account_move.currency_id.id or journal.currency_id.id,
-                'payment_method_line_id': payment_method_line.id or 1,
+                'currency_id': account_move.currency_id.id,
                 'payment_method_id': payment_method.id,
-                # 'ref': order.name,
-                'destination_account_id': partner.property_account_receivable_id.id,
-                'move_id': account_move.id
+                'ref': f"Paiement Wave - {self.reference}",
+                'move_id': account_move.id,  # Lier directement à la facture existante
             })
 
             # Valider le paiement
             payment.action_post()
 
-            # Relier le paiement à la facture
-            account_move.js_assign_outstanding_line(payment.line_ids[0].id)
+            # Réconcilier automatiquement le paiement avec la facture
+            self._reconcile_payment_with_invoice(payment, account_move)
 
-            _logger.info(f"Paiement et facture créés avec succès pour la transaction {self.transaction_id}")
+            _logger.info(f"Paiement créé et réconcilié avec succès pour la transaction {self.transaction_id}")
             return True
-
         except Exception as e:
-            _logger.error(f"Erreur lors de la création du paiement et de la facture: {str(e)}")
+            _logger.error(f"Erreur lors de la création du paiement: {str(e)}")
             return False
 
 
-    def create_payment_method_line(self, payment_method_id, journal_id):
+
+    def _reconcile_payment_with_invoice(self, payment, invoice):
         """
-        Crée une ligne de méthode de paiement pour un journal donné.
-
+        Réconcilie le paiement avec la facture
         Args:
-            payment_method_id (int): ID de la méthode de paiement (account.payment.method)
-            journal_id (int): ID du journal (account.journal)
-
-        Returns:
-            account.payment.method.line: Ligne de méthode de paiement créée
+            payment: Objet account.payment
+            invoice: Objet account.move
         """
         try:
-            # Vérifier que la méthode de paiement et le journal existent
-            payment_method = self.env['account.payment.method'].browse(payment_method_id)
-            journal = self.env['account.journal'].browse(journal_id)
-
-            if not payment_method or not journal:
-                raise ValueError("La méthode de paiement ou le journal n'existe pas.")
-
-            # Créer la ligne de méthode de paiement
-            payment_method_line = self.env['account.payment.method.line'].create({
-                'name': f"{payment_method.name} - {journal.name}",
-                'payment_method_id': payment_method_id,
-                'journal_id': journal_id,
-                'sequence': 10,  # Ordre d'affichage
-            })
-
-            return payment_method_line
+            invoice_lines = invoice.line_ids.filtered(
+                lambda line: line.account_id.account_type == 'asset_receivable' and not line.reconciled
+            )
+            if not invoice_lines:
+                invoice_lines = invoice.line_ids.filtered(
+                    lambda line: line.account_id.internal_type == 'receivable' and not line.reconciled
+                )
+            payment_lines = payment.move_id.line_ids.filtered(
+                lambda line: line.account_id.account_type == 'asset_receivable'
+            )
+            if not payment_lines:
+                payment_lines = payment.move_id.line_ids.filtered(
+                    lambda line: line.account_id.internal_type == 'receivable'
+                )
+            lines_to_reconcile = invoice_lines + payment_lines
+            if lines_to_reconcile:
+                lines_to_reconcile.reconcile()
+                _logger.info(f"Paiement {payment.name} réconcilié avec la facture {invoice.name}")
+            else:
+                _logger.warning(f"Aucune ligne à réconcilier trouvée pour le paiement {payment.name} et la facture {invoice.name}")
         except Exception as e:
-            _logger.exception("Erreur lors de la création de la ligne de méthode de paiement : %s", str(e))
-            return None
+            _logger.error(f"Erreur lors de la réconciliation du paiement: {str(e)}")
+
+
 
 
     _sql_constraints = [
