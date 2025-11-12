@@ -147,12 +147,10 @@ class WaveMoneyWebhookController(http.Controller):
                     ('company_id', '=', company.id)
                 ], limit=1)
 
-            payment_method_line = request.env['account.payment.method.line'].sudo().search([
-                ('journal_id', '=', journal.id),
-                ('payment_method_id.payment_type', '=', 'inbound')
-            ], limit=1)
+            _logger.info("Journal de vente %s", journal.name)
+                
 
-            payment = self._register_payment( invoice, amount, journal.id, payment_method_line.id)
+            payment = self._register_payment( invoice, amount, journal.id)
             if not payment:
                 return {'success': False, 'error': 'Erreur lors de l\'enregistrement du paiement'}
 
@@ -184,13 +182,22 @@ class WaveMoneyWebhookController(http.Controller):
             account.payment
         """
         try:
+
+            payment_method = request.env['account.payment.method'].sudo().search([('payment_type', '=', 'inbound')], limit=1)
+            _logger.info("payment_method: %s", payment_method)
+            
+            if not payment_method:
+                payment_method = request.env['account.payment.method'].sudo().search([('payment_type', '=', 'inbound')], limit=1)
+
+
             payment_obj = request.env['account.payment'].create({
                 'payment_type': 'inbound',
                 'partner_type': 'customer',
                 'partner_id': invoice.partner_id.id,
                 'amount': amount,
                 'journal_id': journal_id,
-                'payment_method_line_id': payment_method_line_id or request.env['account.payment.method.line'].search([('name', '=', 'Manual'), ('payment_method_id.payment_type', '=', 'inbound')], limit=1).id,
+                'payment_method_line_id': 1,
+                'payment_method_id': payment_method.id,
                 'date': fields.Date.today(),
                 'ref': f"{invoice.name}",
                 'is_reconciled': True,

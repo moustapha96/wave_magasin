@@ -755,17 +755,7 @@ class WaveTransaction(models.Model):
 
             # Rechercher une méthode de paiement
             payment_method = self.env['account.payment.method'].search([('payment_type', '=', 'inbound')], limit=1)
-            payment_method_line = self.env['account.payment.method.line'].search([
-                ('payment_method_id', '=', payment_method.id),
-                ('journal_id', '=', journal.id)
-            ], limit=1)
-
-            if not payment_method_line:
-                _logger.error("Aucune méthode de paiement trouvée.")
-                return False
-
-            
-
+           
             # Créer le paiement
             payment = self.env['account.payment'].create({
                 'payment_type': 'inbound',
@@ -774,7 +764,7 @@ class WaveTransaction(models.Model):
                 'amount': self.amount,
                 'journal_id': journal.id,
                 'currency_id': partner.currency_id.id or account_move.currency_id.id or journal.currency_id.id,
-                'payment_method_line_id': payment_method_line.id,
+                'payment_method_line_id': 1,
                 'payment_method_id': payment_method.id,
                 # 'ref': order.name,
                 'destination_account_id': partner.property_account_receivable_id.id,
