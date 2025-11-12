@@ -502,7 +502,7 @@ class WaveTransaction(models.Model):
             # Créer le paiement et le relier à la facture
             try:
                 self._create_payment_and_link_invoice()
-                _logger.info(f"Paiement créé et réconcilié avec succès pour la transaction {self.transaction_id}")
+                _logger.info(f"Paiement créé et réconcilié avec succès pour la transaction {self.transaction_id} au niveau de write")
             except Exception as e:
                 _logger.error(f"Erreur lors de la création du paiement pour la transaction {self.transaction_id}: {str(e)}")
             return result
@@ -775,7 +775,7 @@ class WaveTransaction(models.Model):
                 'currency_id': account_move.currency_id.id,
                 'payment_method_id': payment_method.id,
                 'ref': f"Paiement Wave - {self.reference}",
-                'move_id': account_move.id,  # Lier directement à la facture existante
+                # 'move_id': account_move.id,  # Lier directement à la facture existante
             })
 
             # Valider le paiement
